@@ -3,7 +3,7 @@ project(filters)
 
 set(CMAKE_CXX_STANDARD 11)
 
-set(OpenCV_DIR /home/opencv/opencv)
+set(OpenCV_DIR /home/openCV/release_qt)
 
 find_package(OpenCV REQUIRED)
 
