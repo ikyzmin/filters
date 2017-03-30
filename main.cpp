@@ -7,7 +7,13 @@
 using namespace cv;
 using namespace std;
 
-const int kMenuTabs = 12;
+const int kMenuTabs = 13;
+const int ddepth = CV_16S;
+
+const char
+        *xGradWinName = "Gradient in the direction Ox",
+        *yGradWinName = "Gradient in the direction Oy",
+        *gradWinName = "Gradient";
 
 const char *menu[] =
         {
@@ -92,6 +98,27 @@ int applyOperation(const Mat &src, const int operationIdx) {
     char key = -1;
     Mat dst;
     Mat prepared;
+    Mat laplacianImg, laplacianImgAbs;
+    Mat xGrad, yGrad,xGradAbs, yGradAbs, grad,bgrChannels[3];
+    double lowThreshold = 70, uppThreshold = 260;
+    Mat  bHist, gHist, rHist, histImg;
+    float range[] = {0.0f, 256.0f};
+    const float* histRange = { range };
+    int kBins = 256; // количество бинов гистограммы
+    // равномерное распределение интервала по бинам
+    bool uniform = true;
+    // запрет очищения перед вычислением гистограммы
+    bool accumulate = false;
+    // размеры для отображения гистограммы
+    int histWidth = 512, histHeight = 400;
+    // количество пикселей на бин
+    int binWidth = cvRound((double)histWidth / kBins);
+    int i, kChannels = 3;
+    int channels[] = {0};
+    Scalar colors[] = {Scalar(255, 0, 0),
+                       Scalar(0, 255, 0), Scalar(0, 0, 255)};
+
+    double alpha = 0.5, beta = 0.5;
 
     const float kernelData[] = {-0.1f, 0.2f, -0.1f,
                                 0.2f, 3.0f, 0.2f,
@@ -123,16 +150,90 @@ int applyOperation(const Mat &src, const int operationIdx) {
             prepared = prepareForDilateAndErode(src);
             dilate(prepared, dst, element);
             break;
-
+        case 8:
+            GaussianBlur(src, dst, Size(3, 3), 0, 0);
+            prepared = prepareForDilateAndErode(dst);
+            Sobel(prepared, xGrad, ddepth, 1, 0);
+            Sobel(prepared, yGrad, ddepth, 0, 1);
+            convertScaleAbs(xGrad, xGradAbs);
+            convertScaleAbs(yGrad, yGradAbs);
+            addWeighted(xGradAbs, alpha, yGradAbs, beta, 0, grad);
+            namedWindow(xGradWinName, CV_WINDOW_AUTOSIZE);
+            namedWindow(yGradWinName, CV_WINDOW_AUTOSIZE);
+            namedWindow(gradWinName, CV_WINDOW_AUTOSIZE);
+            imshow(xGradWinName, xGradAbs);
+            imshow(yGradWinName, yGradAbs);
+            imshow(gradWinName, grad);
+            break;
+        case 9:
+            GaussianBlur(src, dst, Size(3, 3), 0, 0);
+            prepared = prepareForDilateAndErode(dst);
+            Laplacian(prepared, laplacianImg, ddepth);
+            convertScaleAbs(laplacianImg, laplacianImgAbs);
+            dst = laplacianImgAbs;
+            break;
+        case 10:
+            blur(src, dst, Size(3,3));
+            prepared = prepareForDilateAndErode(dst);
+            Canny(prepared, dst, lowThreshold, uppThreshold);
+            break;
+        case 11:
+            // выделение каналов изображения
+            split(src, bgrChannels);
+            // вычисление гистограммы для каждого канала
+            calcHist(&bgrChannels[0], 1, 0, Mat(), bHist, 1, &kBins, &histRange, uniform, accumulate);
+            calcHist(&bgrChannels[1], 1, 0, Mat(), gHist, 1, &kBins, &histRange, uniform, accumulate);
+            calcHist(&bgrChannels[2], 1, 0, Mat(), rHist, 1, &kBins, &histRange, uniform, accumulate);
+            // построение гистограммы
+            histImg = Mat(histHeight, histWidth, CV_8UC3,
+                          Scalar(0, 0, 0));
+            // нормализация гистограмм в соответствии с размерам
+            // окна для отображения
+            normalize(bHist, bHist, 0, histImg.rows,
+                      NORM_MINMAX, -1, Mat());
+            normalize(gHist, gHist, 0, histImg.rows,
+                      NORM_MINMAX, -1, Mat());
+            normalize(rHist, rHist, 0, histImg.rows,
+                      NORM_MINMAX, -1, Mat());
+            // отрисовка ломаных
+            for (i = 1; i < kBins; i++)
+            {
+                line(histImg, Point(binWidth * (i-1),
+                                    histHeight-cvRound(bHist.at<float>(i-1))) ,
+                     Point(binWidth * i,
+                           histHeight-cvRound(bHist.at<float>(i)) ),
+                     colors[0], 2, 8, 0);
+                line(histImg, Point(binWidth * (i-1),
+                                    histHeight-cvRound(gHist.at<float>(i-1))) ,
+                     Point(binWidth * i,
+                           histHeight-cvRound(gHist.at<float>(i)) ),
+                     colors[1], 2, 8, 0);
+                line(histImg, Point(binWidth * (i-1),
+                                    histHeight-cvRound(rHist.at<float>(i-1))) ,
+                     Point(binWidth * i,
+                           histHeight-cvRound(rHist.at<float>(i)) ),
+                     colors[2], 2, 8, 0);
+            }
+            dst = histImg;
+            break;
+        case 12:
+            cvtColor(src, prepared, CV_RGB2GRAY);
+            equalizeHist(prepared, dst);
+            break;
     }
+    if (operationIdx != 8) {
     // show initial image
     namedWindow(winNames[0], 1);
-    imshow(winNames[0], src);
+        if (operationIdx==12) {
+            imshow(winNames[0], prepared);
+        }else{
+            imshow(winNames[0], src);
+        }
     // show processed image
     namedWindow(winNames[operationIdx]);
     imshow(winNames[operationIdx], dst);
-    IplImage *img = cvLoadImage("../cube.jpg");
     cvNamedWindow(winNames[operationIdx]);
+}
     cvWaitKey();
     return 0;
 }
