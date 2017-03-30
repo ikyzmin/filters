@@ -7,7 +7,8 @@
 using namespace cv;
 using namespace std;
 
-const int kMenuTabs = 13;
+const int kMenuTabs = 14;
+const int kMorphMenuTabs = 6;
 const int ddepth = CV_16S;
 
 const char
@@ -28,8 +29,27 @@ const char *menu[] =
                 "9 - Apply Laplacian(...)",
                 "10 - Apply Canny(...)",
                 "11 - Apply calcHist(...)",
-                "12 - Apply equalizeHist(...)"
+                "12 - Apply equalizeHist(...)",
+                "13 - Morphology(...)"
         };
+
+const char *morphMenu[] =
+        {
+                "1 - Apply MORPH_OPEN",
+                "2 - Apply MORPH_CLOSE",
+                "3 - Apply MORPH_GRADIENT",
+                "4 - Apply MORPH_TOPHAT",
+                "5 - Apply MORPH_BLACKHAT",
+        };
+
+const char *morphType[] = {
+        "MORPH_OPEN",
+        "MORPH_CLOSE",
+        "MORPH_GRADIENT",
+        "MORPH_TOPHAT",
+        "5MORPH_BLACKHAT",
+};
+
 
 const char *winNames[] =
         {
@@ -45,7 +65,8 @@ const char *winNames[] =
                 "Laplacian",
                 "Canny",
                 "calcHist",
-                "equalizeHist"
+                "equalizeHist",
+                "Morphology "
         };
 
 const int escCode = 27;
@@ -53,8 +74,17 @@ const int escCode = 27;
 void printMenu() {
     int i = 0;
     printf("Menu items:\n");
-    for (i; i < kMenuTabs; i++) {
+    for (i; i < kMenuTabs-1; i++) {
         printf("\t%s\n", menu[i]);
+    }
+    printf("\n");
+}
+
+void printMorphMenu() {
+    int i = 0;
+    printf("Menu items:\n");
+    for (i; i < kMorphMenuTabs-1; i++) {
+        printf("\t%s\n", morphMenu[i]);
     }
     printf("\n");
 }
@@ -76,7 +106,7 @@ void chooseMenuTab(int &activeMenuTab, Mat &srcImg) {
         scanf("%d", &tabIdx);
         loadImage(srcImg);
         if (tabIdx >= 1 && tabIdx < kMenuTabs &&
-                   srcImg.data == 0) {
+            srcImg.data == 0) {
             // read image
             printf("The image should be read to applym operation!\n");
             loadImage(srcImg);
@@ -87,6 +117,28 @@ void chooseMenuTab(int &activeMenuTab, Mat &srcImg) {
     }
 }
 
+void chooseMorphMenuTab(int &activeMenuTab, Mat &srcImg) {
+    int tabIdx;
+    while (true) {
+        // print menu items
+        printMorphMenu();
+        // get menu item identifier to apply operation
+        printf("Input item identifier to apply operation: ");
+        scanf("%d", &tabIdx);
+        loadImage(srcImg);
+        if (tabIdx >= 1 && tabIdx < kMorphMenuTabs &&
+            srcImg.data == 0) {
+            // read image
+            printf("The image should be read to applym operation!\n");
+            loadImage(srcImg);
+        } else if (tabIdx >= 1 && tabIdx < kMorphMenuTabs) {
+            activeMenuTab = tabIdx;
+            break;
+        }
+    }
+}
+
+
 Mat prepareForDilateAndErode(Mat src) {
     Mat grayscaled, binary;
     cvtColor(src, grayscaled, COLOR_RGB2GRAY, 0);
@@ -94,16 +146,57 @@ Mat prepareForDilateAndErode(Mat src) {
     return binary;
 }
 
-int applyOperation(const Mat &src, const int operationIdx) {
+int applyMorphOperation(const Mat &src, const int operationIdx) {
+    char key = -1;
+    Mat dst;
+    Mat prepared;
+    Mat element;
+    switch (operationIdx) {
+        case 1:
+            morphologyEx(src, dst,
+                         MORPH_OPEN, element);
+            break;
+        case 2:
+            morphologyEx(src, dst,
+                         MORPH_CLOSE, element);
+            break;
+        case 3:
+            morphologyEx(src, dst,
+                         MORPH_GRADIENT, element);
+            break;
+        case 4:
+            morphologyEx(src, dst,
+                         MORPH_TOPHAT, element);
+            break;
+        case 5:
+            morphologyEx(src, dst,
+                         MORPH_BLACKHAT, element);
+            break;
+    }
+    // show initial image
+    namedWindow(winNames[0], 1);
+    imshow(winNames[0], src);
+    // show processed image
+    char *winName = (char*)calloc(sizeof(winNames[13]),sizeof(char));
+    strcpy(winName, winNames[13]);
+    cvNamedWindow(strcat(winName, morphType[operationIdx-1]));
+    namedWindow(winName);
+    imshow(winName, dst);
+    cvWaitKey();
+    free(winName);
+    return 0;
+}
+
+int applyOperation(Mat &src, const int operationIdx) {
     char key = -1;
     Mat dst;
     Mat prepared;
     Mat laplacianImg, laplacianImgAbs;
-    Mat xGrad, yGrad,xGradAbs, yGradAbs, grad,bgrChannels[3];
+    Mat xGrad, yGrad, xGradAbs, yGradAbs, grad, bgrChannels[3];
     double lowThreshold = 70, uppThreshold = 260;
-    Mat  bHist, gHist, rHist, histImg;
+    Mat bHist, gHist, rHist, histImg;
     float range[] = {0.0f, 256.0f};
-    const float* histRange = { range };
+    const float *histRange = {range};
     int kBins = 256; // количество бинов гистограммы
     // равномерное распределение интервала по бинам
     bool uniform = true;
@@ -112,7 +205,7 @@ int applyOperation(const Mat &src, const int operationIdx) {
     // размеры для отображения гистограммы
     int histWidth = 512, histHeight = 400;
     // количество пикселей на бин
-    int binWidth = cvRound((double)histWidth / kBins);
+    int binWidth = cvRound((double) histWidth / kBins);
     int i, kChannels = 3;
     int channels[] = {0};
     Scalar colors[] = {Scalar(255, 0, 0),
@@ -173,7 +266,7 @@ int applyOperation(const Mat &src, const int operationIdx) {
             dst = laplacianImgAbs;
             break;
         case 10:
-            blur(src, dst, Size(3,3));
+            blur(src, dst, Size(3, 3));
             prepared = prepareForDilateAndErode(dst);
             Canny(prepared, dst, lowThreshold, uppThreshold);
             break;
@@ -196,22 +289,21 @@ int applyOperation(const Mat &src, const int operationIdx) {
             normalize(rHist, rHist, 0, histImg.rows,
                       NORM_MINMAX, -1, Mat());
             // отрисовка ломаных
-            for (i = 1; i < kBins; i++)
-            {
-                line(histImg, Point(binWidth * (i-1),
-                                    histHeight-cvRound(bHist.at<float>(i-1))) ,
+            for (i = 1; i < kBins; i++) {
+                line(histImg, Point(binWidth * (i - 1),
+                                    histHeight - cvRound(bHist.at<float>(i - 1))),
                      Point(binWidth * i,
-                           histHeight-cvRound(bHist.at<float>(i)) ),
+                           histHeight - cvRound(bHist.at<float>(i))),
                      colors[0], 2, 8, 0);
-                line(histImg, Point(binWidth * (i-1),
-                                    histHeight-cvRound(gHist.at<float>(i-1))) ,
+                line(histImg, Point(binWidth * (i - 1),
+                                    histHeight - cvRound(gHist.at<float>(i - 1))),
                      Point(binWidth * i,
-                           histHeight-cvRound(gHist.at<float>(i)) ),
+                           histHeight - cvRound(gHist.at<float>(i))),
                      colors[1], 2, 8, 0);
-                line(histImg, Point(binWidth * (i-1),
-                                    histHeight-cvRound(rHist.at<float>(i-1))) ,
+                line(histImg, Point(binWidth * (i - 1),
+                                    histHeight - cvRound(rHist.at<float>(i - 1))),
                      Point(binWidth * i,
-                           histHeight-cvRound(rHist.at<float>(i)) ),
+                           histHeight - cvRound(rHist.at<float>(i))),
                      colors[2], 2, 8, 0);
             }
             dst = histImg;
@@ -220,21 +312,28 @@ int applyOperation(const Mat &src, const int operationIdx) {
             cvtColor(src, prepared, CV_RGB2GRAY);
             equalizeHist(prepared, dst);
             break;
+        case 13:
+                int activeMorphMenuTab = -1;
+                chooseMorphMenuTab(activeMorphMenuTab, src);
+                applyMorphOperation(src, activeMorphMenuTab);
+            break;
     }
-    if (operationIdx != 8) {
-    // show initial image
-    namedWindow(winNames[0], 1);
-        if (operationIdx==12) {
-            imshow(winNames[0], prepared);
-        }else{
-            imshow(winNames[0], src);
+    if (operationIdx<13) {
+        if (operationIdx != 8) {
+            // show initial image
+            namedWindow(winNames[0], 1);
+            if (operationIdx == 12) {
+                imshow(winNames[0], prepared);
+            } else {
+                imshow(winNames[0], src);
+            }
+            // show processed image
+            namedWindow(winNames[operationIdx]);
+            imshow(winNames[operationIdx], dst);
+            cvNamedWindow(winNames[operationIdx]);
         }
-    // show processed image
-    namedWindow(winNames[operationIdx]);
-    imshow(winNames[operationIdx], dst);
-    cvNamedWindow(winNames[operationIdx]);
-}
-    cvWaitKey();
+        cvWaitKey();
+    }
     return 0;
 }
 
@@ -252,6 +351,7 @@ int main() {
         // вопрос о необходимости продолжения
         printf("Do you want to continue? ESC - exit\n");
         // ожидание нажатия клавиши
+
         ans = waitKey();
     } while (ans != escCode);
     destroyAllWindows(); // закрытие всех окон
